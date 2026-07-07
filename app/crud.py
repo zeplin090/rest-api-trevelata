@@ -32,6 +32,18 @@ def would_cause_cycle(db: Session, topic_id: int, new_parent_id: int | None) -> 
 
 
 def create_topic(db: Session, code: str, title: str, parent_id: int|None = None, is_active: bool = True):
+    """Создание тикета 
+
+    Args:
+        db (Session): База данных
+        code (str): Код тикета
+        title (str): Заголовок
+        parent_id (int | None, optional): Родительский id. Defaults to None.
+        is_active (bool, optional): Флаг активности. Defaults to True.
+
+    Returns:
+        _type_: Добавленный тикет (Удалить если не нужно)
+    """
     exist = db.query(TicketTopic).filter(TicketTopic.code == code).first()
     if exist:
         return "CONFLICT"
@@ -44,6 +56,16 @@ def create_topic(db: Session, code: str, title: str, parent_id: int|None = None,
 
 
 def update_topic(db:Session, id:int, data:dict):
+    """Обновление тикета
+
+    Args:
+        db (Session): База данных
+        id (int): id тикета
+        data (dict): данные для обновления
+
+    Returns:
+        _type_: _description_
+    """
     db_data = db.query(TicketTopic).filter(TicketTopic.id == id).first()
     if not db_data:
         return "Not Found"
@@ -59,6 +81,14 @@ def update_topic(db:Session, id:int, data:dict):
 
 
 def soft_del_topic(db:Session, id:int):
+    """Мягкое удаление тикета
+
+    Args:
+        db (Session): База данных
+        id (int): id тикета
+    Returns:
+        _type_: _description_
+    """
     db_data = db.query(TicketTopic).filter(TicketTopic.id == id).first()
     if not db_data:
         return "Not Found"
@@ -83,6 +113,17 @@ def get_topic(db:Session, id:int):
 
 
 def get_topics(db:Session, is_active:bool|None=None, page:int=1, per_page:int=20):
+    """Получение списка тикетов по id
+
+    Args:
+        db (Session): База данных
+        is_active(bool): Фильтр по активным
+        page(int): Страница
+        per_page(int): Количество на странице
+
+    Returns:
+        list: Список тикетов из бд
+    """
     stmt = select(TicketTopic)
     
     if is_active is not None:
