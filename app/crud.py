@@ -13,13 +13,13 @@ def would_cause_cycle(db: Session, topic_id: int, new_parent_id: int | None) -> 
         parent = db.query(TicketTopic).filter(TicketTopic.id == current_parent_id).first()
         if not parent:
             break
-        if parent.parent_id == topic_id:
-            return True  # Нашли петлю в дереве
+        # if parent.parent_id == topic_id:
+        #     return True  # Нашли петлю в дереве
         current_parent_id = parent.parent_id
         
     return False
 
-def crate_topic(db: Session, code: str, title: str, parent_id: int = None, is_active: bool = True):
+def crate_topic(db: Session, code: str, title: str, parent_id: int|None = None, is_active: bool = True):
     exist = db.query(TicketTopic).filter(TicketTopic.code == code).first()
     if exist:
         return "CONFLICT"
@@ -39,5 +39,5 @@ def soft_del_topic(db:Session, id:int):
 def get_topic(db:Session, id:int):
     pass
 
-def get_topics(db:Session, is_active:bool=None, page:int=1, per_page:int=20):
+def get_topics(db:Session, is_active:bool|None=None, page:int=1, per_page:int=20):
     pass
