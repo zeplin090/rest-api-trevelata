@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 from .model_db import TicketTopic
-
+from datetime import datetime, timezone
 
 def would_cause_cycle(db: Session, topic_id: int, new_parent_id: int | None) -> bool:
     """Проверка ссылки на цикличность
@@ -93,6 +93,7 @@ def soft_del_topic(db:Session, id:int):
     if not db_data:
         return "Not Found"
     db_data.is_active = False  # type: ignore
+    db_data.deleted_at = datetime.now(timezone.utc)  # type: ignore
     db.commit()
 
 
