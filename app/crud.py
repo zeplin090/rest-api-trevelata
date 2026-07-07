@@ -1,8 +1,19 @@
 from sqlalchemy.orm import Session
+from sqlalchemy import select
 from .model_db import TicketTopic
 
 
 def would_cause_cycle(db: Session, topic_id: int, new_parent_id: int | None) -> bool:
+    """Проверка ссылки на цикличность
+
+    Args:
+        db (Session): Бдшка
+        topic_id (int): id ссылки
+        new_parent_id (int | None): родительский id ссылки
+
+    Returns:
+        bool: Да или нет?
+    """
     if new_parent_id is None:
         return False
     if topic_id == new_parent_id:
@@ -13,31 +24,81 @@ def would_cause_cycle(db: Session, topic_id: int, new_parent_id: int | None) -> 
         parent = db.query(TicketTopic).filter(TicketTopic.id == current_parent_id).first()
         if not parent:
             break
-        # if parent.parent_id == topic_id:
-        #     return True  # Нашли петлю в дереве
+        if parent.parent_id == topic_id:  # type: ignore
+            return True  # Нашли петлю в дереве
         current_parent_id = parent.parent_id
         
     return False
 
-def crate_topic(db: Session, code: str, title: str, parent_id: int|None = None, is_active: bool = True):
+
+def create_topic(db: Session, code: str, title: str, parent_id: int|None = None, is_active: bool = True):
     exist = db.query(TicketTopic).filter(TicketTopic.code == code).first()
     if exist:
         return "CONFLICT"
     
     topic = TicketTopic(code=code, title=title, parent_id=parent_id, is_active=is_active)
-    db.add(topic)
+    db.add(topic) # Тут сам проверку на цикличность сделай, мне не нужна
     db.commit()
     db.refresh(topic)
     return topic
 
+
 def update_topic(db:Session, id:int, data:dict):
-    pass
+    db_data = db.query(TicketTopic).filter(TicketTopic.id == id).first()
+    if not db_data:
+        return "Not Found"
+    if "parent_id" in data:
+        if would_cause_cycle(db, id, data["parent_id"]):
+            return "CYCLE_DETECTED"
+    for key, val in data.items():
+        if key == "id":
+            continue
+        if hasattr(db_data, key):
+            setattr(db_data, key,val)
+    db.commit()
+
 
 def soft_del_topic(db:Session, id:int):
-    pass
+    db_data = db.query(TicketTopic).filter(TicketTopic.id == id).first()
+    if not db_data:
+        return "Not Found"
+    db_data.is_active = False  # type: ignore
+    db.commit()
+
 
 def get_topic(db:Session, id:int):
-    pass
+    """Получение тикета по id
+
+    Args:
+        db (Session): База данных
+        id (int): id тикета
+
+    Returns:
+        dict: Строка из бд в виде словаря
+    """
+    topic = db.get(TicketTopic, id)
+    if not topic:
+        return "Not Found"
+    return dict(topic.__dict__)
+
 
 def get_topics(db:Session, is_active:bool|None=None, page:int=1, per_page:int=20):
-    pass
+    stmt = select(TicketTopic)
+    
+    if is_active is not None:
+        stmt = stmt.where(TicketTopic.is_active == is_active)
+        
+    offset_value = (page - 1) * per_page
+    stmt = stmt.offset(offset_value).limit(per_page)
+    
+    # Выполняем запрос. .scalars().all() вернет список объектов TicketTopic
+    topics = db.execute(stmt).scalars().all()
+    
+    # Очищаем от _sa_instance_state
+    result = []
+    for topic in topics:
+        t_dict = dict(topic.__dict__)
+        t_dict.pop("_sa_instance_state", None)
+        result.append(t_dict)
+        
+    return result
