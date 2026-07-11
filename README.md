@@ -1,73 +1,79 @@
-# rest-api-trevelata
-Сейчас в проекте реализованы:
+## Что реализовано
 
 - SQLAlchemy-модель таблицы `ticket_topics`;
 - подключение к PostgreSQL;
-- CRUD-функции для создания, чтения, обновления и мягкого удаления тематик;
-- проверка циклов при смене `parent_id`;
-- Alembic-миграция для создания таблицы;
+- REST API для CRUD-операций;
+- проверка циклических ссылок при изменении `parent_id`;
+- мягкое удаление через `is_active = False` и `deleted_at`;
+- Alembic-миграции;
+- тесты API в папке `tests`.
 
-## Стек
+## Технологии
 
-- Python
+- Python 3.13
+- FastAPI
 - PostgreSQL
 - SQLAlchemy 2
 - Alembic
+- pytest
 
 ## Структура проекта
 
 ```text
 .
 ├── app/
-│   ├── crud.py                 # CRUD-операции для ticket_topics
-│   ├── database.py             # подключение к PostgreSQL и фабрика сессий
-│   └── model_db.py             # SQLAlchemy-модель TicketTopic
+│   ├── crud.py                 # CRUD-логика для тематик
+│   ├── database.py            # подключение к PostgreSQL и фабрика сессий
+│   ├── main.py                # FastAPI endpoints
+│   └── model_db.py            # SQLAlchemy-модель TicketTopic
 ├── migrations/
-│   ├── env.py                  # настройка Alembic
+│   ├── env.py                 # настройка Alembic
 │   └── versions/
 │       └── ac688ad0df24_initial_commit.py
-├── alembic.ini                 # настройки Alembic
+├── tests/
+│   └── test_api.py            # API-тесты
+├── alembic.ini                # настройки Alembic
+├── docker-compose.yml         # запуск PostgreSQL + API через Docker
+├── dockerfile                 # контейнер для приложения
 ├── requirements.txt
 └── README.md
 ```
 
-## Таблица `ticket_topics`
+## Модель `ticket_topics`
 
-Модель находится в `app/model_db.py`.
+Модель находится в [app/model_db.py](app/model_db.py).
 
 Поля:
 
-- `id` - первичный ключ, автоинкремент;
-- `code` - уникальный код тематики, строка до 64 символов;
-- `title` - название тематики, строка до 200 символов;
-- `parent_id` - ссылка на родительскую тематику, может быть `NULL`;
-- `is_active` - флаг активности;
-- `created_at` - дата создания;
-- `updated_at` - дата обновления;
-- `deleted_at` - поле под мягкое удаление;
-- `parent` / `children` - связь для работы с деревом тематик.
+- `id` — первичный ключ;
+- `code` — уникальный код тематики, строка до 64 символов;
+- `title` — название тематики, строка до 200 символов;
+- `parent_id` — ссылка на родительскую тематику, может быть `NULL`;
+- `is_active` — флаг активности;
+- `created_at` — дата создания;
+- `updated_at` — дата обновления;
+- `deleted_at` — дата мягкого удаления;
+- `parent` / `children` — связи для работы с деревом.
 
-## Подключение к базе
+## Запуск локально
 
-Основная строка подключения находится в `app/database.py`:
+### 1. Установить зависимости
 
-```python
-DATABASE_URL = "postgresql://postgres:root@localhost:5433/ticket_db"
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
 ```
 
-В `alembic.ini` используется та же база:
+### 2. Подготовить PostgreSQL
 
-```ini
-sqlalchemy.url = postgresql://postgres:root@127.0.0.1:5433/ticket_db
+По умолчанию приложение ожидает подключение к базе:
+
+```text
+postgresql://postgres:root@localhost:5433/ticket_db
 ```
 
-Если PostgreSQL работает на другом порту или с другим паролем, поменять строку подключения в двух местах:
-
-- `app/database.py`;
-- `alembic.ini`.
-
-## Подготовка базы данных
-
+Создайте базу вручную, если она ещё не существует:
 
 ```powershell
 psql -U postgres
@@ -77,86 +83,75 @@ psql -U postgres
 CREATE DATABASE ticket_db;
 ```
 
-Если таблица уже создана вручную, миграции можно не запускать.
-
-Если нужно создать таблицу через Alembic:
+### 3. Применить миграции
 
 ```powershell
 alembic upgrade head
 ```
 
-Миграция создаёт таблицу `ticket_topics` и уникальный индекс по полю `code`.
+### 4. Запустить API
 
-## CRUD-функции
-
-Функции находятся в `app/crud.py`.
-
-### `create_topic`
-
-Создаёт новую тематику.
-
-```python
-create_topic(
-    db=db,
-    code="payment",
-    title="Оплата и возвраты",
-    parent_id=None,
-    is_active=True,
-)
+```powershell
+uvicorn app.main:app --reload
 ```
 
-Если тема с таким `code` уже есть, функция возвращает строку:
+Swagger UI будет доступен по адресу:
 
 ```text
-CONFLICT
+http://127.0.0.1:8000/docs
 ```
 
-### `get_topic`
+## Запуск через Docker Compose
 
-Получает одну тематику по `id`.
+Проект также поддерживает запуск в контейнерах:
 
-```python
-get_topic(db=db, id=2)
+```powershell
+docker compose up --build
 ```
 
-Если запись не найдена, возвращает:
+После запуска:
 
-```text
-Not Found
+- API будет доступен на `http://localhost:8000`
+- Swagger UI — на `http://localhost:8000/docs`
+- PostgreSQL будет доступен на `localhost:5432`
+
+> В Docker-контейнере приложение использует внутреннюю строку подключения к сервису `db` и базе `ticket_topics`.
+
+## API
+
+Основные эндпоинты:
+
+- `GET /topics` — список тематик с пагинацией и фильтром `is_active`
+- `GET /topics/{item_id}` — получить одну тему по `id`
+- `POST /topics` — создать тему
+- `PUT /topics/{item_id}` — обновить тему
+- `DELETE /topics/{item_id}` — мягко удалить тему
+
+### Пример создания темы
+
+```http
+POST /topics
+Content-Type: application/json
+
+{
+  "code": "payment",
+  "title": "Оплата и возвраты",
+  "parent_id": null,
+  "is_active": true
+}
 ```
 
-### `get_topics`
+## Валидация и ошибки
 
-Получает список тематик с пагинацией и опциональным фильтром активности.
+- `code` должен соответствовать шаблону `^[a-zA-Z0-9_]+$`
+- дублирующийся `code` вернёт `409 Conflict`
+- попытка создать цикл через `parent_id` вернёт `400 Bad Request`
+- несуществующий `id` вернёт `404 Not Found`
 
-```python
-get_topics(db=db, is_active=True, page=1, per_page=20)
-```
+## Тесты
 
-### `update_topic`
-
-Обновляет поля тематики.
-
-```python
-update_topic(
-    db=db,
-    id=4,
-    data={"title": "Оплата прошла"},
-)
-```
-
-При обновлении `parent_id` выполняется проверка на цикл в дереве. Если новый родитель создаёт цикл, функция возвращает:
-
-```text
-CYCLE_DETECTED
-```
-
-### `soft_del_topic`
-
-Выполняет мягкое удаление через `is_active = False`.
-
-```python
-soft_del_topic(db=db, id=4)
+```powershell
+pytest -q
 ```
 
 ## Полезные команды
