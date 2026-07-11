@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: ticket_db
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: root
+      POSTGRES_DB: ticket_topics
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  web:
+    build: .
+    container_name: ticket_api
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      # Передаем строку подключения к БД внутри докер-сети (вместо localhost пишем имя сервиса db)
+      DATABASE_URL: postgresql://postgres:root@db:5432/ticket_topics
+    depends_on:
+      - db
+    # Прикол: перед запуском uvicorn накатываем миграции alembic
+    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+
+volumes:
+  postgres_data:
