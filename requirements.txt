@@ -7,7 +7,6 @@ certifi==2026.6.17
 click==8.4.2
 colorama==0.4.6
 coverage==7.15.0
-Django==4.2.13
 django-filter==24.1
 djangorestframework==3.14.0
 fastapi==0.139.0
@@ -28,7 +27,6 @@ pydantic_core==2.46.4
 Pygments==2.20.0
 pytest==9.1.1
 pytest-cov==7.1.0
-pytest-django==4.12.0
 pytz==2026.2
 SQLAlchemy==2.0.51
 sqlparse==0.5.5

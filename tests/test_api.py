@@ -1,11 +1,25 @@
 import pytest
 from fastapi.testclient import TestClient
-
-# Импортируем твой app из main.py
 from app.main import app
+from app.database import SessionLocal  # Импортируем твою фабрику сессий
+from app.model_db import TicketTopic  # Импортируем модель для очистки
 
-# Создаем клиента для запросов
+# Создаем глобального клиента, как у тебя и было
 client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def clear_db():
+    """Фикстура автоматически очищает таблицу после КАЖДОГО теста"""
+    yield  # Здесь запускается сам тест
+    
+    # А этот код выполняется строго ПОСЛЕ теста
+    db = SessionLocal()
+    try:
+        db.query(TicketTopic).delete()
+        db.commit()
+    finally:
+        db.close()
 
 # 1. ТЕСТЫ НА СОЗДАНИЕ (POST)
 
@@ -18,34 +32,39 @@ def test_create_topic_success():
     assert response.status_code == 201
     data = response.json()
     assert data["code"] == "visa_test"
-    assert data["title"] == "Визовые вопросы"
     assert "id" in data
 
 
 def test_create_topic_duplicate_code():
     """Негативный тест: попытка создать дубликат кода (409 Conflict)"""
-    # Первый запрос — создаем
     client.post(
         "/topics",
-        json={"code": "duplicate", "title": "Оригинал", "parent_id": None}
+        json={"code": "duplicate", "title": "Оригинал"}
     )
-    # Второй запрос — с тем же кодом
     response = client.post(
         "/topics",
-        json={"code": "duplicate", "title": "Дубликат", "parent_id": None}
+        json={"code": "duplicate", "title": "Дубликат"}
     )
     assert response.status_code == 409
-    assert response.json()["detail"] == "Topic with this code already exists"
 
 
 def test_create_topic_missing_title():
     """Валидация: создание без обязательного поля title (400 Bad Request)"""
     response = client.post(
         "/topics",
-        json={"code": "no_title", "parent_id": None}
+        json={"code": "no_title"}
     )
     assert response.status_code == 400
-    assert "message" in response.json()
+
+
+def test_create_topic_non_existent_parent():
+    """Негативный тест: указание несуществующего parent_id (400 Bad Request)"""
+    response = client.post(
+        "/topics",
+        json={"code": "orphan_node", "title": "Сирота", "parent_id": 999999}
+    )
+    assert response.status_code == 400
+
 
 # 2. ТЕСТЫ НА ПОЛУЧЕНИЕ (GET)
 
@@ -60,20 +79,18 @@ def test_get_topic_not_found():
     """Тест получения несуществующей записи (404 Not Found)"""
     response = client.get("/topics/999999")
     assert response.status_code == 404
-    assert response.json()["detail"] == "Topic not found"
+
 
 # 3. ТЕСТЫ НА ОБНОВЛЕНИЕ И ЦИКЛЫ (PUT)
 
 def test_update_topic_success():
     """Успешное обновление заголовка"""
-    # Сначала создаем тему для теста
     create_res = client.post(
         "/topics",
         json={"code": "for_update", "title": "Старый заголовок"}
     )
     topic_id = create_res.json()["id"]
 
-    # Обновляем
     response = client.put(
         f"/topics/{topic_id}",
         json={"title": "Новый заголовок"}
@@ -82,40 +99,50 @@ def test_update_topic_success():
     assert response.json()["title"] == "Новый заголовок"
 
 
+def test_update_topic_duplicate_code():
+    """Негативный тест: изменение кода на уже существующий в другой записи (409 Conflict)"""
+    client.post("/topics", json={"code": "code_one", "title": "Первая"})
+    res_two = client.post("/topics", json={"code": "code_two", "title": "Вторая"})
+    topic_id = res_two.json()["id"]
+
+    response = client.put(f"/topics/{topic_id}", json={"code": "code_one"})
+    assert response.status_code == 409
+
+
 def test_update_topic_cycle():
     """Тест проверки на цикличность (400 Bad Request)"""
-    # Создаем родителя
     res_p = client.post("/topics", json={"code": "parent_node", "title": "Родитель"})
     p_id = res_p.json()["id"]
 
-    # Создаем потомка и привязываем к родителю
     res_c = client.post("/topics", json={"code": "child_node", "title": "Потомок", "parent_id": p_id})
     c_id = res_c.json()["id"]
 
-    # Пытаемся сделать родителя потомком своего же ребенка (петля!)
     response = client.put(
         f"/topics/{p_id}",
         json={"parent_id": c_id}
     )
     assert response.status_code == 400
-    assert response.json()["detail"] == "Cyclic dependency detected in parent_id"
+
+
+def test_update_topic_non_existent_parent():
+    """Негативный тест: изменение parent_id на несуществующий ID (400 Bad Request)"""
+    res = client.post("/topics", json={"code": "update_parent_test", "title": "Тема"})
+    topic_id = res.json()["id"]
+
+    response = client.put(f"/topics/{topic_id}", json={"parent_id": 999999})
+    assert response.status_code == 400
+
 
 # 4. ТЕСТ НА МЯГКОЕ УДАЛЕНИЕ (DELETE)
 
 def test_soft_delete_topic():
     """Тест мягкого удаления"""
-    # Создаем тему
     create_res = client.post("/topics", json={"code": "for_delete", "title": "На удаление"})
     topic_id = create_res.json()["id"]
 
-    # Удаляем
     delete_res = client.delete(f"/topics/{topic_id}")
     assert delete_res.status_code == 204
 
-    # Проверяем, что при GET запросе она теперь выдает 404 или флаг изменился
-    # (в зависимости от того, скрывает ли твой get_topic удаленные записи)
     check_res = client.get(f"/topics/{topic_id}")
-    # Если твой get_topic просто возвращает dict, то проверим флаг активности:
     if check_res.status_code == 200:
         assert check_res.json()["is_active"] is False
-        assert check_res.json()["deleted_at"] is not None

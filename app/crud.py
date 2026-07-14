@@ -48,8 +48,14 @@ def create_topic(db: Session, code: str, title: str, parent_id: int|None = None,
     if exist:
         return "CONFLICT"
     
+    if parent_id is not None:
+        parent_exist = db.query(TicketTopic).filter(TicketTopic.id == parent_id).first()
+        if not parent_exist:
+            return "NOT PARENT"
+
+
     topic = TicketTopic(code=code, title=title, parent_id=parent_id, is_active=is_active)
-    db.add(topic) # Тут сам проверку на цикличность сделай, мне не нужна
+    db.add(topic) 
     db.commit()
     db.refresh(topic)
     return topic
@@ -69,6 +75,23 @@ def update_topic(db:Session, id:int, data:dict):
     db_data = db.query(TicketTopic).filter(TicketTopic.id == id).first()
     if not db_data:
         return "Not Found"
+    
+    data_parent_id = data.get("parent_id")
+    if  data_parent_id is not None:
+        parent_exist = db.query(TicketTopic).filter(TicketTopic.id == data_parent_id).first()
+        if not parent_exist:
+            return "NOT PARENT"
+    
+    data_code = data.get("code")
+    if data_code is not None:
+        code_exist = db.query(TicketTopic).filter(
+            TicketTopic.code == data_code,
+            TicketTopic.id != id
+        ).first()
+        if code_exist:
+            return "CONFLICT"
+
+    
     if "parent_id" in data:
         if would_cause_cycle(db, id, data["parent_id"]):
             return "CYCLE_DETECTED"
@@ -78,6 +101,7 @@ def update_topic(db:Session, id:int, data:dict):
         if hasattr(db_data, key):
             setattr(db_data, key,val)
     db.commit()
+    return db_data
 
 
 def soft_del_topic(db:Session, id:int):
@@ -110,7 +134,9 @@ def get_topic(db:Session, id:int):
     topic = db.get(TicketTopic, id)
     if not topic:
         return "Not Found"
-    return dict(topic.__dict__)
+    t_dict = dict(topic.__dict__)
+    t_dict.pop("_sa_instance_state", None)
+    return t_dict
 
 
 def get_topics(db:Session, is_active:bool|None=None, page:int=1, per_page:int=20):

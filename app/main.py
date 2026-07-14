@@ -80,7 +80,12 @@ def api_create_topic(payload: TopicCreate, db: Session = Depends(get_db)):
             status_code=status.HTTP_409_CONFLICT, 
             detail="Topic with this code already exists"
         )
-        
+    if result == "NOT PARENT":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, 
+            detail="Parent topic does not exist"
+        )
+    
     return result
 
 
@@ -96,12 +101,21 @@ def api_update_topic(item_id: int, payload: TopicUpdate, db: Session = Depends(g
             status_code=status.HTTP_404_NOT_FOUND, 
             detail="Topic not found"
         )
+    if result == "NOT PARENT":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, 
+            detail="Parent topic does not exist"
+        )
     if result == "CYCLE_DETECTED":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, 
             detail="Cyclic dependency detected in parent_id"
         )
-        
+    if result == "CONFLICT":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, 
+            detail="Topic with this code already exists"
+        )
     return get_topic(db=db, id=item_id)
 
 
