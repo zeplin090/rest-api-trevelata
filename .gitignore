@@ -2,3 +2,4 @@ app/test.py
 app/__pycache__
 app/03_topics_seed.json
 tests/__pycache__
+migrations/__pycache__
