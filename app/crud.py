@@ -57,7 +57,7 @@ def create_topic(db: Session, code: str, title: str, parent_id: int | None = Non
             return "NOT PARENT"
 
     topic = TicketTopic(code=code, title=title, parent_id=parent_id, is_active=is_active)
-    db.add(topic) # Тут сам проверку на цикличность сделай, мне не нужна
+    db.add(topic) 
     db.commit()
     db.refresh(topic)
     
@@ -108,6 +108,7 @@ def update_topic(db: Session, id: int, data: dict):
             setattr(db_data, key, val)
     
     db.commit()
+    return db_data
 
 
 def soft_del_topic(db:Session, id:int):
@@ -147,7 +148,9 @@ def get_topic(db:Session, id:int):
     topic = db.get(TicketTopic, id)
     if not topic:
         return "Not Found"
-    return dict(topic.__dict__)
+    t_dict = dict(topic.__dict__)
+    t_dict.pop("_sa_instance_state", None)
+    return t_dict
 
 
 def get_topics(db:Session, is_active:bool|None=None, page:int=1, per_page:int=20):
