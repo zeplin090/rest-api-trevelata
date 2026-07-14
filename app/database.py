@@ -1,12 +1,15 @@
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 import os
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker, DeclarativeBase
 
-
-DATABASE_URL = os.getenv("DATABASE_URL","postgresql://postgres:root@localhost:5433/ticket_db")
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:root@localhost:5433/ticket_db")
 
 engine = create_engine(DATABASE_URL)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+
+class Base(DeclarativeBase):
+    pass
 
 def get_db():
     db = SessionLocal()
